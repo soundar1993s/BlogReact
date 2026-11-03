@@ -33,8 +33,11 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
-        checkout scm
         script {
+          def checkoutInfo = checkout scm
+          env.CHECKOUT_BRANCH = checkoutInfo.GIT_BRANCH ?: env.BRANCH_NAME ?: ''
+          env.DEPLOY_ENABLED = (!env.CHANGE_ID && params.DEPLOY_BRANCH == 'main' && env.CHECKOUT_BRANCH in ['main', 'origin/main']).toString()
+          echo "Checked out ${env.CHECKOUT_BRANCH}; publish and deploy enabled: ${env.DEPLOY_ENABLED}"
           env.IMAGE_TAG = "${env.BUILD_NUMBER}-${sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()}"
         }
         sh 'mkdir -p reports'
@@ -92,7 +95,7 @@ pipeline {
       }
     }
     stage('Publish ECR') {
-      when { expression { !env.CHANGE_ID && (env.BRANCH_NAME == params.DEPLOY_BRANCH || env.GIT_BRANCH == "origin/${params.DEPLOY_BRANCH}") } }
+      when { expression { env.DEPLOY_ENABLED == 'true' } }
       steps {
         withCredentials([usernamePassword(credentialsId: 'aws-ci', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh '''
@@ -108,7 +111,7 @@ pipeline {
       }
     }
     stage('Nexus Release Bundle') {
-      when { expression { params.PUBLISH_NEXUS && !env.CHANGE_ID && (env.BRANCH_NAME == params.DEPLOY_BRANCH || env.GIT_BRANCH == "origin/${params.DEPLOY_BRANCH}") } }
+      when { expression { params.PUBLISH_NEXUS && env.DEPLOY_ENABLED == 'true' } }
       steps {
         withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASSWORD')]) {
           withEnv(["NEXUS_RAW_URL=${params.NEXUS_RAW_URL}"]) {
@@ -124,7 +127,7 @@ pipeline {
       }
     }
     stage('Deploy EKS') {
-      when { expression { !env.CHANGE_ID && (env.BRANCH_NAME == params.DEPLOY_BRANCH || env.GIT_BRANCH == "origin/${params.DEPLOY_BRANCH}") } }
+      when { expression { env.DEPLOY_ENABLED == 'true' } }
       steps {
         withCredentials([usernamePassword(credentialsId: 'aws-ci', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         withEnv(["EKS_CLUSTER=${params.EKS_CLUSTER}"]) {
@@ -147,7 +150,7 @@ pipeline {
       }
     }
     stage('Deployment Validation') {
-      when { expression { !env.CHANGE_ID && (env.BRANCH_NAME == params.DEPLOY_BRANCH || env.GIT_BRANCH == "origin/${params.DEPLOY_BRANCH}") } }
+      when { expression { env.DEPLOY_ENABLED == 'true' } }
       steps {
         withCredentials([usernamePassword(credentialsId: 'aws-ci', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         retry(5) { sh 'node scripts/smoke.mjs' }
