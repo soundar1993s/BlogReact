@@ -1,6 +1,8 @@
 # Cloud phase runbook
 
-Local setup comes first. These commands are for a later, configured AWS environment; they have not been executed against EKS in this session.
+Live deployment was verified on 3 November 2026 in `ap-south-1`, using cluster `blogapp-eks`. The application is available at http://k8s-blogapp-blogappi-e8e48220b4-1416607124.ap-south-1.elb.amazonaws.com. Jenkins job `BlogReact-EKS-CI` publishes immutable ECR tags and deploys through the required quality and security gates. See VALIDATION.md for the recorded results and limitations.
+
+The project owner selected the temporary ALB HTTP address. This demonstration has no owned domain or TLS certificate. Use demonstration data and unique passwords. For HTTPS, disable `HTTP_DEMO`, supply an owned hostname and matching issued ACM certificate, and configure DNS.
 
 ## Architecture and prerequisites
 
@@ -9,6 +11,14 @@ Use Jenkins on a trusted Linux agent, private ECR image repositories and an EKS-
 The agent needs Git, Node 22.12+, npm, Docker/buildx, AWS CLI v2, kubectl compatible with the cluster, Trivy and SonarScanner CLI on PATH. Bootstrap also needs Helm and eksctl. Give AWS access through an instance role or short-lived role credentials; do not put access keys into the Jenkinsfile.
 
 Review `infra/eks-cluster.yaml` before provisioning. It creates private nodes, a private API endpoint, a NAT gateway and two t3.large nodes. Jenkins and the bootstrap administrator need network access inside the VPC (VPN, connected host or equivalent). This configuration creates billable AWS resources. Do not run it as part of local setup.
+
+The live lab uses the same private-node design with public and private API endpoints; public API access is restricted to the administrator connection's IPv4 `/32`. To prepare this variation without committing the administrator IP, set `ADMIN_PUBLIC_CIDR` and run `node scripts/prepare-eks-config.mjs`. It refuses to overwrite `.secrets/eks-cluster.local.yaml`. Review that file, then use `eksctl create cluster --config-file .secrets/eks-cluster.local.yaml --dry-run` before creating resources. Kubernetes 1.37 was used for this verified deployment; review supported versions before future provisioning.
+
+Installed components were EBS CSI add-on `v1.67.2-eksbuild.1`, AWS Load Balancer Controller `v2.14.1` with Helm chart `1.14.0`, metrics-server, and kube-prometheus-stack chart `92.17.1`. The EBS driver uses its own IRSA role with AmazonEBSCSIDriverPolicyV2. The load-balancer controller uses a separate role and the matching official AWS controller IAM policy.
+
+For this local Jenkins lab, the `aws-ci` Username with password credential stores the dedicated `blogapp-ci` IAM access key pair. The IAM policy is limited to the two application ECR repositories and describing this EKS cluster. An EKS access entry maps the identity to the namespace-scoped `blogapp-deployers` group. Verification allowed deployment patching and denied direct Secret reads. Application and controller roles are separate. The bootstrap `project-deployer` administrator is not used by the pipeline. Rotate or revoke the CI key after assessment; use short-lived role credentials for a sustained deployment.
+
+The live job polls Git every five minutes after its first execution. Local Jenkins is not exposed publicly for GitHub webhooks. The earlier `BlogReact-Local-CI` history is retained as a manual reference job and its polling has been removed. Credentials and the Docker socket remain available only to trusted jobs and maintainers.
 
 ```sh
 aws sts get-caller-identity

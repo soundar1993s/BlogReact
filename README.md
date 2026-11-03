@@ -2,7 +2,11 @@
 
 React/Vite frontend → nginx proxy → Express API → MySQL 8.4.
 
-This checkout adds the delivery configuration missing from the upstream project. Local validation is tracked in `docs/VALIDATION.md`; deployment files alone are not evidence of a live EKS deployment.
+Live application: http://k8s-blogapp-blogappi-e8e48220b4-1416607124.ap-south-1.elb.amazonaws.com
+
+Jenkins job `BlogReact-EKS-CI` verifies tests, SonarQube and Trivy gates, publishes versioned private ECR images, deploys to EKS, and checks the public application. Frontend and backend each run two replicas; MySQL uses a persistent EBS volume. Prometheus and Grafana collect live cluster and application metrics. Execution results and limitations are recorded in [docs/VALIDATION.md](docs/VALIDATION.md).
+
+The owner selected the temporary HTTP load-balancer address for this demonstration. HTTPS with an owned domain and ACM certificate remains a separate configuration option. MySQL has one replica, so storage persists across restarts but database restarts can briefly interrupt API access. Use demonstration data and unique passwords.
 
 ## Local setup (Windows PowerShell)
 
