@@ -1,5 +1,6 @@
 pipeline {
   agent { label 'blogapp-linux' }
+  triggers { pollSCM('H/5 * * * *') }
   options {
     timestamps()
     disableConcurrentBuilds()
@@ -10,8 +11,9 @@ pipeline {
   parameters {
     string(name: 'AWS_REGION', defaultValue: 'ap-south-1', description: 'EKS and ECR region')
     string(name: 'EKS_CLUSTER', defaultValue: 'blogapp-eks', description: 'Existing EKS cluster')
-    string(name: 'ECR_REGISTRY', defaultValue: '', description: 'ACCOUNT.dkr.ecr.REGION.amazonaws.com')
-    string(name: 'APP_URL', defaultValue: '', description: 'HTTPS URL for post-deploy validation')
+    string(name: 'ECR_REGISTRY', defaultValue: '985344363717.dkr.ecr.ap-south-1.amazonaws.com', description: 'ACCOUNT.dkr.ecr.REGION.amazonaws.com')
+    string(name: 'APP_URL', defaultValue: 'http://k8s-blogapp-blogappi-e8e48220b4-1416607124.ap-south-1.elb.amazonaws.com', description: 'Public URL for post-deploy validation')
+    booleanParam(name: 'HTTP_DEMO', defaultValue: true, description: 'User-selected demonstration mode using the ALB HTTP address; turn off and configure DNS/certificate for HTTPS')
     string(name: 'DOMAIN_NAME', defaultValue: '', description: 'Application DNS hostname')
     string(name: 'ACM_CERTIFICATE_ARN', defaultValue: '', description: 'Issued certificate ARN')
     string(name: 'DEPLOY_BRANCH', defaultValue: 'main', description: 'Only this trusted branch can publish and deploy')
@@ -24,6 +26,7 @@ pipeline {
     DOMAIN_NAME = "${params.DOMAIN_NAME}"
     ACM_CERTIFICATE_ARN = "${params.ACM_CERTIFICATE_ARN}"
     APP_URL = "${params.APP_URL}"
+    HTTP_DEMO = "${params.HTTP_DEMO}"
     DOCKER_CONFIG = "${WORKSPACE}/.docker-ci"
     KUBECONFIG = "${WORKSPACE}/.kube-ci/config"
   }
@@ -55,7 +58,7 @@ pipeline {
     stage('SonarQube Analysis') {
       steps {
         withSonarQubeEnv('sonarqube-server') {
-          sh 'export SONAR_TOKEN="$SONAR_AUTH_TOKEN"; sonar-scanner'
+          sh 'set +x; export SONAR_TOKEN="$SONAR_AUTH_TOKEN"; sonar-scanner'
         }
       }
     }
@@ -81,7 +84,7 @@ pipeline {
           set -eu
           failed=0
           for component in backend frontend; do
-            trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json \
+            trivy image --image-src docker --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json \
               --output reports/trivy-$component.json blogapp-$component:$IMAGE_TAG || failed=1
           done
           exit "$failed"
@@ -89,21 +92,23 @@ pipeline {
       }
     }
     stage('Publish ECR') {
-      when { allOf { branch params.DEPLOY_BRANCH; not { changeRequest() } } }
+      when { expression { !env.CHANGE_ID && (env.BRANCH_NAME == params.DEPLOY_BRANCH || env.GIT_BRANCH == "origin/${params.DEPLOY_BRANCH}") } }
       steps {
+        withCredentials([usernamePassword(credentialsId: 'aws-ci', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh '''
           set -eu
           node scripts/render-release.mjs > /dev/null
           aws ecr get-login-password | docker login --username AWS --password-stdin "$ECR_REGISTRY"
           for component in backend frontend; do
             docker tag blogapp-$component:$IMAGE_TAG "$ECR_REGISTRY/blogapp-$component:$IMAGE_TAG"
-            docker push "$ECR_REGISTRY/blogapp-$component:$IMAGE_TAG"
+            docker push --platform linux/amd64 "$ECR_REGISTRY/blogapp-$component:$IMAGE_TAG"
           done
         '''
+        }
       }
     }
     stage('Nexus Release Bundle') {
-      when { allOf { branch params.DEPLOY_BRANCH; not { changeRequest() }; expression { params.PUBLISH_NEXUS } } }
+      when { expression { params.PUBLISH_NEXUS && !env.CHANGE_ID && (env.BRANCH_NAME == params.DEPLOY_BRANCH || env.GIT_BRANCH == "origin/${params.DEPLOY_BRANCH}") } }
       steps {
         withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASSWORD')]) {
           withEnv(["NEXUS_RAW_URL=${params.NEXUS_RAW_URL}"]) {
@@ -119,8 +124,9 @@ pipeline {
       }
     }
     stage('Deploy EKS') {
-      when { allOf { branch params.DEPLOY_BRANCH; not { changeRequest() } } }
+      when { expression { !env.CHANGE_ID && (env.BRANCH_NAME == params.DEPLOY_BRANCH || env.GIT_BRANCH == "origin/${params.DEPLOY_BRANCH}") } }
       steps {
+        withCredentials([usernamePassword(credentialsId: 'aws-ci', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         withEnv(["EKS_CLUSTER=${params.EKS_CLUSTER}"]) {
           sh '''
             set -eu
@@ -137,13 +143,16 @@ pipeline {
             kubectl apply -f reports/ingress.yaml
           '''
         }
+        }
       }
     }
     stage('Deployment Validation') {
-      when { allOf { branch params.DEPLOY_BRANCH; not { changeRequest() } } }
+      when { expression { !env.CHANGE_ID && (env.BRANCH_NAME == params.DEPLOY_BRANCH || env.GIT_BRANCH == "origin/${params.DEPLOY_BRANCH}") } }
       steps {
+        withCredentials([usernamePassword(credentialsId: 'aws-ci', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         retry(5) { sh 'node scripts/smoke.mjs' }
         sh 'kubectl get pods,svc,ingress,pvc -n blogapp -o wide > reports/workloads.txt'
+        }
       }
     }
   }

@@ -61,8 +61,16 @@ The initial build failed when C: had approximately 13 MB free and Docker storage
 
 The ignored `.env` already exists. Keep it; rerunning the secret-generation script deliberately refuses to overwrite it.
 
-## Cloud work deferred
+## Jenkins CI verification on 3 November 2026
 
-The user selected “Finish local setup first.” No cloud resources were created and no source was pushed remotely. The existing AWS profile returned `InvalidClientTokenId` during the read-only identity check.
+Source was pushed to https://github.com/soundar1993s/BlogReact. The local Jenkins job `BlogReact-Local-CI`, build 2, passed for commit `e1cbeeab9079e3485e657634281c527fe0a47774`. All seven stages passed: checkout, dependency installation, test and build, SonarQube analysis, quality gate, Docker build and Trivy security gate. Build 1 failed due to an npm registry idle timeout; build 2 succeeded on retry.
 
-Jenkins execution (including its scanning stages), SonarQube analysis/gate behavior, ECR publishing, EKS deployment, TLS/DNS, network-policy enforcement and populated Prometheus/Grafana dashboards have not been verified. Their configuration/runbooks are prepared for the cloud phase. Local Trivy execution is verified independently above.
+Build 2 ran 19 backend tests and 7 frontend client tests. SonarQube returned quality gate `OK`. Overall analysis showed 66.2% coverage, 0 security issues, 21 reliability issues, 5 maintainability issues and 0.0% duplication. A passing gate does not mean all existing issues are resolved.
+
+The two images `blogapp-backend:2-e1cbeeab9079` and `blogapp-frontend:2-e1cbeeab9079` both passed the HIGH/CRITICAL Trivy gate. The JSON reports are archived with build 2. Screenshots and exported scan summaries are preserved in `C:\Users\Soundar\Desktop\Project-Evidence`.
+
+SonarQube's local webhook destination validation was disabled for this controlled Docker lab so it could call the private Jenkins container hostname. The webhook uses a signing secret stored in Jenkins credentials. Reassess this instance-wide setting before exposing the service externally.
+
+## Cloud verification pending
+
+No cloud resources have been created by this work. ECR publishing, EKS deployment, TLS/DNS, network-policy enforcement and populated Prometheus/Grafana dashboards are not yet verified. The AWS profile still returned `InvalidClientTokenId` at the latest read-only check. A locally working application is not a publicly accessible submission URL.
