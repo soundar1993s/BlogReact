@@ -1,0 +1,106 @@
+pipeline {
+  agent { label 'blogapp-linux' }
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    timeout(time: 45, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '15'))
+    skipDefaultCheckout(true)
+  }
+
+  triggers {
+    pollSCM('H/5 * * * *')
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          env.IMAGE_TAG = "${env.BUILD_NUMBER}-${sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()}"
+        }
+        sh 'mkdir -p reports'
+      }
+    }
+
+    stage('Install Dependencies') {
+      steps {
+        sh '''
+          set -eu
+          npm ci
+          npm ci --prefix backend
+          npm ci --prefix frontend
+        '''
+      }
+    }
+
+    stage('Test and Build') {
+      steps {
+        sh '''
+          set -eu
+          npm run lint --prefix backend
+          npm test --prefix backend
+          npm test --prefix frontend
+          npm run build --prefix frontend
+          npm run validate
+        '''
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      steps {
+        withSonarQubeEnv('sonarqube-server') {
+          sh '''
+            set +x
+            export SONAR_TOKEN="$SONAR_AUTH_TOKEN"
+            sonar-scanner
+          '''
+        }
+      }
+    }
+
+    stage('Quality Gate') {
+      steps {
+        timeout(time: 10, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+
+    stage('Docker Build') {
+      steps {
+        sh '''
+          set -eu
+          docker build --pull -t "blogapp-backend:$IMAGE_TAG" backend
+          docker build --pull -t "blogapp-frontend:$IMAGE_TAG" frontend
+        '''
+      }
+    }
+
+    stage('Trivy Security Gate') {
+      steps {
+        sh '''
+          set -eu
+          failed=0
+          for component in backend frontend; do
+            trivy image --image-src docker --scanners vuln \
+              --severity HIGH,CRITICAL --exit-code 1 \
+              --format json --output "reports/trivy-$component.json" \
+              "blogapp-$component:$IMAGE_TAG" || failed=1
+            trivy convert --format table \
+              "reports/trivy-$component.json" || failed=1
+          done
+          exit "$failed"
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: 'reports/**,backend/coverage/lcov.info,frontend/coverage/lcov.info',
+        allowEmptyArchive: true
+    }
+  }
+}
