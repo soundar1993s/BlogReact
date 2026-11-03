@@ -1,0 +1,36 @@
+# Review network ranges, node sizing and region before creating billable resources.
+# Install current eksctl; its default supported EKS version is used.
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: blogapp-eks
+  region: ap-south-1
+iam:
+  withOIDC: true
+vpc:
+  nat:
+    gateway: Single
+  clusterEndpoints:
+    publicAccess: false
+    privateAccess: true
+managedNodeGroups:
+  - name: application
+    instanceType: t3.large
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 4
+    privateNetworking: true
+    volumeSize: 30
+    volumeEncrypted: true
+    disableIMDSv1: true
+    labels:
+      workload: blogapp
+addons:
+  - name: vpc-cni
+    configurationValues: '{"enableNetworkPolicy":"true"}'
+  - name: coredns
+  - name: kube-proxy
+cloudWatch:
+  clusterLogging:
+    enableTypes: [api, audit, authenticator, controllerManager, scheduler]
+    logRetentionInDays: 7

@@ -1,0 +1,30 @@
+# Install release name "monitoring" in namespace "monitoring".
+grafana:
+  # Precreate this Secret outside Git; keys admin-user and admin-password.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  service:
+    type: ClusterIP
+  persistence:
+    enabled: true
+    storageClassName: blogapp-gp3
+    size: 5Gi
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: monitoring
+prometheus:
+  service:
+    type: ClusterIP
+  prometheusSpec:
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: blogapp-gp3
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 20Gi

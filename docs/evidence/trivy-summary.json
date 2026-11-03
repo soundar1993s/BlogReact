@@ -1,0 +1,30 @@
+[
+  {
+    "image": "blogreact-backend:latest",
+    "imageId": "sha256:910aabf756778b9eee5b07d2c1995c94b0464633d68775aac5f9092b74461819",
+    "scannedAt": "2026-11-03T07:54:05.4445224+05:30",
+    "scanner": "Trivy 0.76.1",
+    "severityFilter": [
+      "HIGH",
+      "CRITICAL"
+    ],
+    "initialHigh": 6,
+    "initialCritical": 0,
+    "finalHigh": 0,
+    "finalCritical": 0
+  },
+  {
+    "image": "blogreact-frontend:latest",
+    "imageId": "sha256:566b375a0a42f2e5da9acefa58b67be3eea0adb99addb6a247ab64e524dac246",
+    "scannedAt": "2026-11-03T07:54:07.987232+05:30",
+    "scanner": "Trivy 0.76.1",
+    "severityFilter": [
+      "HIGH",
+      "CRITICAL"
+    ],
+    "initialHigh": 2,
+    "initialCritical": 0,
+    "finalHigh": 0,
+    "finalCritical": 0
+  }
+]

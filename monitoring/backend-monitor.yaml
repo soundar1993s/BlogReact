@@ -1,0 +1,49 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: blogapp-backend
+  labels: { release: monitoring }
+spec:
+  namespaceSelector:
+    matchNames: [blogapp]
+  selector:
+    matchLabels: { app: backend }
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: blogapp-alerts
+  labels: { release: monitoring }
+spec:
+  groups:
+    - name: blogapp
+      rules:
+        - alert: BlogDatabaseUnavailable
+          expr: blogapp_database_up{namespace="blogapp"} == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: Backend cannot query MySQL
+        - alert: BlogBackendMetricsMissing
+          expr: absent(up{namespace="blogapp",service="backend-service"}) or up{namespace="blogapp",service="backend-service"} == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: Backend metrics target is unavailable
+        - alert: BlogHighErrorRate
+          expr: sum(rate(http_request_duration_seconds_count{namespace="blogapp",status=~"5.."}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{namespace="blogapp"}[5m])), 0.001) > 0.05
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: More than five percent of backend requests fail
+        - alert: BlogPodRestarting
+          expr: increase(kube_pod_container_status_restarts_total{namespace="blogapp"}[15m]) > 3
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: Application container is repeatedly restarting

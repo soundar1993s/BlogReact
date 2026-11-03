@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mysql
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+spec:
+  clusterIP: None
+  selector: { app: mysql }
+  ports:
+    - { name: mysql, port: 3306, targetPort: 3306 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+spec:
+  serviceName: mysql-service
+  replicas: 1
+  selector:
+    matchLabels: { app: mysql }
+  template:
+    metadata:
+      labels: { app: mysql }
+    spec:
+      serviceAccountName: mysql
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: mysql
+          image: public.ecr.aws/docker/library/mysql:8.4
+          args: [--skip-name-resolve]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          env:
+            - { name: MYSQL_DATABASE, value: blogdb }
+            - { name: MYSQL_USER, value: bloguser }
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: database-credentials, key: DB_PASSWORD }
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: database-credentials, key: MYSQL_ROOT_PASSWORD }
+          ports:
+            - { name: mysql, containerPort: 3306 }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: '1', memory: 1Gi }
+          startupProbe:
+            exec:
+              command: [sh, -c, 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u "$MYSQL_USER" -D blogdb -e "SELECT 1 FROM users LIMIT 1"']
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: [sh, -c, 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u "$MYSQL_USER" -D blogdb -e "SELECT 1 FROM users LIMIT 1"']
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: [sh, -c, 'mysqladmin --protocol=TCP -h 127.0.0.1 ping --silent']
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/mysql }
+            - { name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+            - { name: run, mountPath: /var/run/mysqld }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: init
+          configMap: { name: mysql-init }
+        - { name: run, emptyDir: {} }
+        - { name: tmp, emptyDir: {} }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: blogapp-gp3
+        resources:
+          requests: { storage: 10Gi }

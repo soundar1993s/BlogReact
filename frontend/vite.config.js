@@ -13,4 +13,12 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
   },
+  test: {
+    coverage: {
+      provider: 'v8',
+      include: ['src/api/client.js'],
+      reporter: ['text', 'lcov'],
+      thresholds: { lines: 90, statements: 90, functions: 90, branches: 80 },
+    },
+  },
 });

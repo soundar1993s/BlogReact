@@ -1,0 +1,12 @@
+{
+  "name": "blogapp-delivery-tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12" },
+  "scripts": {
+    "validate": "node scripts/validate-manifests.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "devDependencies": { "yaml": "^2.8.1" }
+}

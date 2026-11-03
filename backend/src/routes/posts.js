@@ -9,7 +9,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page) || 1, 1);
-    const limit = Math.min(parseInt(req.query.limit) || 9, 50);
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 9, 50));
     const offset = (page - 1) * limit;
     const { tag, search } = req.query;
 
@@ -51,7 +51,7 @@ router.get('/:slug', optionalAuth, async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT p.*, u.name AS author_name FROM posts p
-       JOIN users u ON u.id = p.author_id WHERE p.slug = :slug`,
+       JOIN users u ON u.id = p.author_id WHERE p.slug = :slug AND p.status = 'published'`,
       { slug: req.params.slug }
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Post not found' });

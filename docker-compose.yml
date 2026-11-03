@@ -1,0 +1,55 @@
+services:
+  mysql:
+    image: public.ecr.aws/docker/library/mysql:8.4
+    command: [--skip-name-resolve]
+    environment:
+      MYSQL_DATABASE: blogdb
+      MYSQL_USER: bloguser
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Run scripts/init-local-secrets.ps1 first}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Run scripts/init-local-secrets.ps1 first}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u "$$MYSQL_USER" -D blogdb -e "SELECT 1 FROM users LIMIT 1"']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [database]
+    restart: unless-stopped
+  backend:
+    build: ./backend
+    environment:
+      NODE_ENV: production
+      DB_HOST: mysql
+      DB_NAME: blogdb
+      DB_USER: bloguser
+      DB_PASSWORD: ${DB_PASSWORD:?Run scripts/init-local-secrets.ps1 first}
+      JWT_SECRET: ${JWT_SECRET:?Run scripts/init-local-secrets.ps1 first}
+    depends_on:
+      mysql: { condition: service_healthy }
+    networks: [application, database]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_HOST: backend
+      BACKEND_PORT: '5000'
+    ports: ['127.0.0.1:3000:8080']
+    depends_on:
+      backend: { condition: service_healthy }
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+volumes:
+  mysql-data:
+networks:
+  application:
+  database:
+    internal: true

@@ -1,0 +1,42 @@
+# Apply once as a cluster administrator, outside the application pipeline.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: blogapp-deployer
+  namespace: blogapp
+rules:
+  - apiGroups: ['']
+    resources: [services, configmaps, serviceaccounts]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: ['']
+    resources: [pods, pods/log, persistentvolumeclaims, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies, ingresses]
+    verbs: [get, list, watch, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: blogapp-deployer
+  namespace: blogapp
+subjects:
+  - kind: Group
+    name: blogapp-deployers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: blogapp-deployer
+  apiGroup: rbac.authorization.k8s.io
