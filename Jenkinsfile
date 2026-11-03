@@ -101,11 +101,7 @@ pipeline {
         sh '''
           set -eu
           node scripts/render-release.mjs > /dev/null
-          aws ecr get-login-password | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-          for component in backend frontend; do
-            docker tag blogapp-$component:$IMAGE_TAG "$ECR_REGISTRY/blogapp-$component:$IMAGE_TAG"
-            docker push --platform linux/amd64 "$ECR_REGISTRY/blogapp-$component:$IMAGE_TAG"
-          done
+          node scripts/publish-images.mjs
         '''
         }
       }
