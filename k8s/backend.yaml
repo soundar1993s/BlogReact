@@ -45,7 +45,7 @@ spec:
       labels: { app: backend }
     spec:
       serviceAccountName: backend
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 45
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -60,6 +60,10 @@ spec:
       containers:
         - name: backend
           image: blogapp-backend
+          lifecycle:
+            preStop:
+              exec:
+                command: [sh, -c, 'sleep 10']
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

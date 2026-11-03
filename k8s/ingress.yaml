@@ -11,6 +11,7 @@ metadata:
     alb.ingress.kubernetes.io/ssl-redirect: '443'
     alb.ingress.kubernetes.io/certificate-arn: ${ACM_CERTIFICATE_ARN}
     alb.ingress.kubernetes.io/healthcheck-path: /healthz
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
 spec:
   ingressClassName: alb
   rules:
